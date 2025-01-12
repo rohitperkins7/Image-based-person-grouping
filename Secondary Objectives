@@ -1,0 +1,128 @@
+import zipfile
+import cv2
+import numpy as np
+import os
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Function to load images from a ZIP file
+def load_images_from_zip(zip_file_path, target_image_size=(64, 64)):
+    """
+    Load images from a ZIP file, resize them, and return as an array.
+    Args:
+        zip_file_path (str): Path to the ZIP file.
+        target_image_size (tuple): Desired image size (width, height).
+
+    Returns:
+        np.array: Array of images.
+        list: List of filenames.
+    """
+    image_list = []
+    filename_list = []
+
+    # Open the ZIP file
+    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+        # Iterate through each file in the ZIP archive
+        for file_name in zip_ref.namelist():
+            # Check if the file is an image based on its extension
+            if file_name.lower().endswith(('.png', '.jpg', '.jpeg')):
+                with zip_ref.open(file_name) as image_file:
+                    # Read the image
+                    image_data = np.frombuffer(image_file.read(), np.uint8)
+                    image = cv2.imdecode(image_data, cv2.IMREAD_COLOR)
+
+                    # Check if the image was successfully read
+                    if image is not None:
+                        # Resize the image
+                        resized_image = cv2.resize(image, target_image_size)
+                        image_list.append(resized_image)
+                        filename_list.append(file_name)
+                    else:
+                        print(f"Warning: Could not read file {file_name} as an image.")
+
+    return np.array(image_list), filename_list
+
+# Path to the ZIP file
+zip_file_path = "/content/tango-cv-assessment-dataset.zip"
+
+# Load the images from the ZIP file
+images, filenames = load_images_from_zip(zip_file_path)
+
+# Verify the loaded images
+print(f"Loaded {len(images)} images.")
+
+# 2. Preprocess the Data
+# Flatten the images for clustering and visualization
+image_data_flattened = images.reshape(len(images), -1)
+
+# Standardize the data
+scaler = StandardScaler()
+image_data_scaled = scaler.fit_transform(image_data_flattened)
+
+# 3. Perform Clustering (KMeans)
+num_clusters = 5  # Adjust based on the dataset
+kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+cluster_assignments = kmeans.fit_predict(image_data_scaled)
+
+# 4. Dimensionality Reduction for Visualization
+def reduce_dimensions(data, num_dimensions=2, reduction_method="PCA"):
+    """
+    Reduce the dimensionality of the data using PCA or t-SNE.
+    Args:
+        data (np.array): The data to reduce.
+        num_dimensions (int): The target number of dimensions.
+        reduction_method (str): The dimensionality reduction technique ("PCA" or "t-SNE").
+
+    Returns:
+        np.array: The data with reduced dimensions.
+    """
+    if reduction_method == "PCA":
+        reducer = PCA(n_components=num_dimensions)
+    elif reduction_method == "t-SNE":
+        reducer = TSNE(n_components=num_dimensions, random_state=42)
+    else:
+        raise ValueError("Unsupported method")
+    return reducer.fit_transform(data)
+
+# Reduce dimensions for 2D visualization
+reduced_data_2d = reduce_dimensions(image_data_scaled, num_dimensions=2, reduction_method="PCA")
+
+# Plot 2D Visualization
+plt.figure(figsize=(10, 8))
+plt.scatter(reduced_data_2d[:, 0], reduced_data_2d[:, 1], c=cluster_assignments, cmap="magma", s=10)
+plt.colorbar(label="Cluster")
+plt.title("2D PCA Visualization of Dataset")
+plt.xlabel("Principal Component 1")
+plt.ylabel("Principal Component 2")
+plt.show()
+
+# Reduce dimensions for 3D visualization
+reduced_data_3d = reduce_dimensions(image_data_scaled, num_dimensions=3, reduction_method="PCA")
+
+# Plot 3D Visualization
+figure_3d = plt.figure(figsize=(10, 8))
+axes_3d = figure_3d.add_subplot(111, projection="3d")
+scatter_3d = axes_3d.scatter(reduced_data_3d[:, 0], reduced_data_3d[:, 1], reduced_data_3d[:, 2],
+                            c=cluster_assignments, cmap="inferno", s=10)
+legend_3d = axes_3d.legend(*scatter_3d.legend_elements(), title="Clusters")
+axes_3d.add_artist(legend_3d)
+plt.title("3D PCA Visualization of Dataset")
+axes_3d.set_xlabel("Principal Component 1")
+axes_3d.set_ylabel("Principal Component 2")
+axes_3d.set_zlabel("Principal Component 3")
+plt.show()
+
+# Optional: t-SNE for non-linear embedding
+reduced_data_tsne = reduce_dimensions(image_data_scaled, num_dimensions=2, reduction_method="t-SNE")
+
+figure_tsne = plt.figure(figsize=(10, 8))
+plt.scatter(reduced_data_tsne[:, 0], reduced_data_tsne[:, 1], c=cluster_assignments, cmap="plasma", s=10)
+plt.colorbar(label="Cluster")
+plt.title("t-SNE Visualization of Dataset")
+plt.xlabel("t-SNE Component 1")
+plt.ylabel("t-SNE Component 2")
+plt.show()
